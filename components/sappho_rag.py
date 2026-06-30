@@ -13,7 +13,6 @@ Placement in project:
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -51,7 +50,7 @@ def _get_chroma_client() -> chromadb.ClientAPI:
     global _chroma_client
     if _chroma_client is None:
         # Ensure directory exists
-        CHROMA_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CHROMA_DB_PATH.mkdir(parents=True, exist_ok=True)
         _chroma_client = chromadb.Client(
             Settings(
                 anonymized_telemetry=False,

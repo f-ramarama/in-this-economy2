@@ -1,4 +1,3 @@
-import json
 import os
 
 from dotenv import load_dotenv
@@ -6,6 +5,14 @@ from openai import OpenAI
 
 load_dotenv()
 client = OpenAI()
+
+DEFAULT_CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+
+# Per-feature model strategy with fallback to the global default.
+MODEL_GENERATE_TEXT = os.getenv("OPENAI_MODEL_GENERATE_TEXT", DEFAULT_CHAT_MODEL)
+MODEL_CRITIQUE = os.getenv("OPENAI_MODEL_CRITIQUE", DEFAULT_CHAT_MODEL)
+MODEL_INTERVIEW = os.getenv("OPENAI_MODEL_INTERVIEW", DEFAULT_CHAT_MODEL)
+MODEL_SAPPHO = os.getenv("OPENAI_MODEL_SAPPHO", DEFAULT_CHAT_MODEL)
 
 
 # ---------------------------------------------------------------------------
@@ -15,7 +22,7 @@ client = OpenAI()
 def generate_text(prompt: str) -> str:
     """General text generation: Fit Check, Cover Letter."""
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_GENERATE_TEXT,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=4000,
         temperature=0.7,
@@ -40,7 +47,7 @@ def critique_text(text: str, context: str | None = None) -> str:
     prompt += f"Corporate text:\n{text}"
 
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_CRITIQUE,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,
         max_tokens=400,
@@ -52,6 +59,7 @@ def chat_interview(
     history: list[dict],
     job_description: str = "",
     cv_context: str = "",
+    interviewer_name: str = "",
     opening: bool = False,
 ) -> str:
     """
@@ -63,6 +71,7 @@ def chat_interview(
                          [{'role': 'user'|'assistant', 'content': str}, …]
         job_description: Optional context: job posting
         cv_context:      Optional context: CV excerpt from RAG
+        interviewer_name: Name used by the hiring manager persona
         opening:         If True, auto-generate opening message instead of responding to history
     """
     system_parts = [
@@ -83,6 +92,12 @@ def chat_interview(
         system_parts.append(
             f"\nYou have access to the candidate's background:\n{cv_context.strip()}"
         )
+    if interviewer_name.strip():
+        system_parts.append(
+            "\nYour name is "
+            f"{interviewer_name.strip()}. In your opening, introduce yourself with this exact name "
+            "and never use placeholders like [Your Name]."
+        )
 
     messages = [{"role": "system", "content": "\n".join(system_parts)}]
     
@@ -92,14 +107,15 @@ def chat_interview(
             "role": "user",
             "content": (
                 "Please open the interview. Welcome the candidate warmly, "
-                "introduce yourself briefly as the hiring manager, and ask your first question."
+                "introduce yourself briefly as the hiring manager using your assigned name, "
+                "and ask your first question."
             )
         })
     else:
         messages.extend(history)
 
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_INTERVIEW,
         messages=messages,
         temperature=0.7,
         max_tokens=400,
@@ -117,7 +133,7 @@ def generate_sappho(prompt: str) -> str:
     Expects an already-built prompt (including RAG context from sappho_rag.py).
     """
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL_SAPPHO,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
         max_tokens=400,

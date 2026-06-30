@@ -74,8 +74,6 @@ def create_embeddings(texts: List[str]) -> List[List[float]]:
 
 
 def build_vector_store(documents: List[Dict[str, str]], collection_name: str = "rag_collection") -> chromadb.api.models.Collection:
-    import tempfile
-    
     # Use persistent ChromaDB to avoid ephemeral conflicts
     chroma_path = os.path.join(os.path.dirname(__file__), "..", ".chroma", "rag")
     os.makedirs(chroma_path, exist_ok=True)
@@ -113,9 +111,22 @@ def build_vector_store(documents: List[Dict[str, str]], collection_name: str = "
     return collection
 
 
-def query_relevant_docs(query: str, collection: chromadb.api.models.Collection, top_k: int = 5) -> Dict[str, Any]:
+def query_relevant_docs(
+    query: str,
+    collection: chromadb.api.models.Collection,
+    top_k: int = 5,
+    source_filter: str | None = None,
+) -> Dict[str, Any]:
     query_embedding = create_embeddings([query])[0]
-    results = collection.query(query_embeddings=[query_embedding], n_results=top_k, include=["documents", "metadatas"])
+    query_kwargs: Dict[str, Any] = {
+        "query_embeddings": [query_embedding],
+        "n_results": top_k,
+        "include": ["documents", "metadatas"],
+    }
+    if source_filter:
+        query_kwargs["where"] = {"source": source_filter}
+
+    results = collection.query(**query_kwargs)
     return results
 
 

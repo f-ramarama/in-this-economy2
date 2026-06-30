@@ -5,7 +5,7 @@ Two lenses on application language:
 
   Lens A – Vocational Tool
     · Fit Check (RAG-powered)
-    · Cover Letter Generator + Peer Review
+        · Cover Letter Generator
     · Mock Interview Chatbot (full Context Window)
 
   Lens B – Humanist Exploration
@@ -46,6 +46,7 @@ from components.sappho_rag import (
     format_sappho_context,
     query_sappho,
 )
+from components.sappho_names import get_random_sappho_name
 
 load_dotenv()
 
@@ -71,6 +72,9 @@ if "rag_collection" not in st.session_state:
 if "uploaded_documents_text" not in st.session_state:
     st.session_state.uploaded_documents_text = ""
 
+if "uploaded_document_sources" not in st.session_state:
+    st.session_state.uploaded_document_sources = []
+
 if "sappho_collection" not in st.session_state:
     st.session_state.sappho_collection = None
 
@@ -79,6 +83,9 @@ if "chat_history" not in st.session_state:
 
 if "interview_job_desc" not in st.session_state:
     st.session_state.interview_job_desc = ""
+
+if "interview_manager_name" not in st.session_state:
+    st.session_state.interview_manager_name = ""
 
 # ── Load Sappho poem database once ──────────────────────────────────────────
 
@@ -121,6 +128,7 @@ with st.sidebar:
                     st.session_state.rag_collection = build_vector_store(documents)
                     # Store combined documents for all functions
                     st.session_state.uploaded_documents_text = get_full_document_text(documents)
+                    st.session_state.uploaded_document_sources = [doc["source"] for doc in documents]
                 st.success(f"✓ Index built for {len(documents)} file(s).")
             else:
                 st.warning("No valid documents found.")
@@ -242,7 +250,7 @@ if mode == "Lens A: Vocational Tool":
                 
                 fit_answer = generate_text(full_prompt)
 
-            col1, col2 = st.columns(2)
+            col1, _ = st.columns(2)
             col1.metric("Relevant sections found", len(results.get("documents", [[]])[0]))
             st.subheader("Result")
             
@@ -421,12 +429,14 @@ if mode == "Lens A: Vocational Tool":
                 "experiences, or skills that are not mentioned in the text.\n\n"
 
                 "STRUCTURE\n"
-                "1. Opening paragraph: Express genuine interest in the specific role and organization. "
+                "1. Appropirate Greeting"
+                "2. Opening paragraph: Express genuine interest in the specific role and organization. "
                 "Do not open with 'I am writing to apply for'. Be direct and specific.\n"
-                "2. Main paragraph(s): Connect the candidate's concrete experience and skills to the "
+                "3. Main paragraph(s): Connect the candidate's concrete experience and skills to the "
                 "key requirements of the role. Be specific — cite actual examples from the CV.\n"
-                "3. Closing paragraph: Briefly state what the candidate brings that is distinctive, "
+                "4. Closing paragraph: Briefly state what the candidate brings that is distinctive, "
                 "and express interest in a conversation. No hollow phrases.\n\n"
+                "5. End greetings and signature line (e.g., 'Sincerely, [Candidate Name]'). Exclude personal data.\n\n"
 
                 "TONE AND STYLE\n"
                 f"Tone: {tone}. "
@@ -466,6 +476,7 @@ if mode == "Lens A: Vocational Tool":
             if st.button("Use uploaded documents as context", key="use_uploaded_for_interview"):
                 st.session_state.interview_job_desc = st.session_state.uploaded_documents_text
                 st.session_state.chat_history = []
+                st.session_state.interview_manager_name = ""
                 st.success("Context from uploaded documents saved. Conversation reset.")
         
         st.caption("Or enter a job description manually (overwrites uploaded documents):")
@@ -479,6 +490,7 @@ if mode == "Lens A: Vocational Tool":
         if st.button("Save context & reset conversation", key="save_interview_context"):
             st.session_state.interview_job_desc = interview_job_input
             st.session_state.chat_history = []
+            st.session_state.interview_manager_name = ""
             st.success("Context saved. Conversation reset.")
 
     # CV context from RAG
@@ -499,14 +511,24 @@ if mode == "Lens A: Vocational Tool":
         not st.session_state.chat_history
         and st.session_state.interview_job_desc.strip()
     ):
+        if not st.session_state.interview_manager_name:
+            st.session_state.interview_manager_name = get_random_sappho_name()
+
         with st.spinner("Hiring Manager is preparing the interview…"):
             opening = chat_interview(
                 history=[],
                 job_description=st.session_state.interview_job_desc,
                 cv_context=cv_context_interview,
+                interviewer_name=st.session_state.interview_manager_name,
                 opening=True,
             )
+
+        # Safety net if a model still returns placeholders.
+        opening = opening.replace("[Your Name]", st.session_state.interview_manager_name)
         st.session_state.chat_history.append({"role": "assistant", "content": opening})
+
+    if st.session_state.interview_manager_name:
+        st.caption(f"Interviewer: {st.session_state.interview_manager_name}")
 
     # Display conversation history
     for message in st.session_state.chat_history:
@@ -523,6 +545,7 @@ if mode == "Lens A: Vocational Tool":
                 history=st.session_state.chat_history,
                 job_description=st.session_state.interview_job_desc,
                 cv_context=cv_context_interview,
+                interviewer_name=st.session_state.interview_manager_name,
             )
 
         st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
@@ -531,6 +554,7 @@ if mode == "Lens A: Vocational Tool":
     if st.session_state.chat_history:
         if st.button("🗑 Reset conversation", key="reset_chat"):
             st.session_state.chat_history = []
+            st.session_state.interview_manager_name = ""
             st.rerun()
 
 
@@ -554,52 +578,104 @@ elif mode == "Lens B: Humanist Exploration":
     if st.session_state.sappho_collection is None:
         st.warning("Sappho database not loaded. Please check `data/sappho_poems.json`.")
     else:
-        corporate_phrase = st.text_area(
-            "Corporate phrase",
-            height=100,
-            placeholder="e.g., 'results-driven team player in a fast-paced environment'",
-            key="sappho_input",
+        translation_source = st.radio(
+            "Translation source",
+            ["Manual phrase", "Uploaded documents (RAG)"],
+            horizontal=True,
+            key="sappho_translation_source",
         )
 
+        corporate_phrase = ""
+        selected_translation_doc = ""
+        rag_top_k = 5
+
+        if translation_source == "Manual phrase":
+            corporate_phrase = st.text_area(
+                "Corporate phrase",
+                height=100,
+                placeholder="e.g., 'results-driven team player in a fast-paced environment'",
+                key="sappho_input",
+            )
+        else:
+            st.caption("Select one uploaded document to translate.")
+            if st.session_state.uploaded_document_sources:
+                selected_translation_doc = st.selectbox(
+                    "Document for translation",
+                    options=st.session_state.uploaded_document_sources,
+                    key="sappho_selected_doc",
+                )
+            st.caption("RAG excerpts per source are fixed to 5 for richer variation.")
+
         if st.button("Translate", key="run_sappho"):
-            if not corporate_phrase.strip():
-                st.warning("Please enter a phrase.")
+            source_text = ""
+
+            if translation_source == "Manual phrase":
+                source_text = corporate_phrase.strip()
+                if not source_text:
+                    st.warning("Please enter a phrase.")
+                    st.stop()
             else:
-                with st.spinner("Sappho is translating…"):
-                    # RAG: get similar poems
-                    hits = query_sappho(
-                        query=corporate_phrase,
-                        collection=st.session_state.sappho_collection,
-                        top_k=3,
-                    )
-                    sappho_context = format_sappho_context(hits)
+                if st.session_state.rag_collection is None:
+                    st.warning("Please upload documents and build the RAG index first.")
+                    st.stop()
+                if not st.session_state.uploaded_document_sources:
+                    st.warning("No indexed documents found. Please rebuild the RAG index.")
+                    st.stop()
+                if not selected_translation_doc:
+                    st.warning("Please select one document for translation.")
+                    st.stop()
 
-                    # Build prompt with poem context
-                    prompt = (
-                        "You are a translator between the language of corporate job postings "
-                        "and the lyrical world of Sappho of Lesbos.\n\n"
-                        "Here are real Sappho poem fragments (translated by John Myers O'Hara, 1910) "
-                        "to draw inspiration from – their imagery, rhythm, and themes should subtly "
-                        "inform your translation:\n\n"
-                        f"{sappho_context}\n\n"
-                        "Now translate this corporate phrase into a short lyrical fragment in Sappho's voice. "
-                        "Keep it to 4–8 lines. Use sensory imagery, address a deity or companion, "
-                        "and let the original emotion behind the corporate words surface.\n\n"
-                        f"Corporate phrase: \"{corporate_phrase}\"\n\n"
-                        "Write the Sapphic fragment:"
-                    )
-                    result = generate_sappho(prompt)
+                selected_doc_hits = query_relevant_docs(
+                    "language style tone requirements responsibilities profile experience education",
+                    st.session_state.rag_collection,
+                    top_k=rag_top_k,
+                    source_filter=selected_translation_doc,
+                )
+                source_text = format_retrieval_results(selected_doc_hits).strip()
+                if not source_text:
+                    st.warning("No relevant RAG text found in the selected document.")
+                    st.stop()
 
-                st.markdown("---")
-                st.subheader("✦ Sappho Answers")
-                st.write(result)
+            with st.spinner("Sappho is translating…"):
+                # RAG: get similar poems
+                hits = query_sappho(
+                    query=source_text[:1500],
+                    collection=st.session_state.sappho_collection,
+                    top_k=3,
+                )
+                sappho_context = format_sappho_context(hits)
 
-                with st.expander("Inspiration sources from poem database"):
-                    for hit in hits:
-                        similarity = max(0.0, 1 - hit["distance"])
-                        st.markdown(f"**{hit['title']}** · Similarity: {similarity:.0%}")
-                        st.caption(f"Themes: {hit['themes']}")
-                        st.caption(f"Curatorial note: {hit['notes']}")
+                # Build prompt with poem context
+                prompt = (
+                    "You are a translator between the language of corporate job postings "
+                    "and the lyrical world of Sappho of Lesbos.\n\n"
+                    "Here are real Sappho poem fragments (translated by John Myers O'Hara, 1910) "
+                    "to draw inspiration from – their imagery, rhythm, and themes should subtly "
+                    "inform your translation:\n\n"
+                    f"{sappho_context}\n\n"
+                    "Now translate the source text into a short lyrical fragment in Sappho's voice. "
+                    "Keep it to 4–8 lines. Use sensory imagery, address a deity or companion, "
+                    "and let the original emotion behind the corporate words surface. "
+                    "If the source text is long, condense its core tensions into one coherent fragment.\n\n"
+                    f"Source text:\n{source_text}\n\n"
+                    "Write the Sapphic fragment:"
+                )
+                result = generate_sappho(prompt)
+
+            st.markdown("---")
+            st.subheader("✦ Sappho Answers")
+            st.write(result)
+
+            if translation_source == "Uploaded documents (RAG)":
+                with st.expander("RAG excerpts used for translation"):
+                    st.text(source_text)
+
+            with st.expander("Inspiration sources from poem database"):
+                for hit in hits:
+                    similarity = max(0.0, 1 - hit["distance"])
+                    st.markdown(f"**{hit['title']}** · Similarity: {similarity:.0%}")
+                    st.caption(f"Themes: {hit['themes']}")
+                    st.caption(f"Curatorial note: {hit['notes']}")
 
     # ── 2. Rhetoric Dashboard / Erasure Critique ──────────────────────────────
     st.markdown("---")
