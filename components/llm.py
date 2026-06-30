@@ -1,4 +1,6 @@
 import os
+import json
+import re
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -13,6 +15,43 @@ MODEL_GENERATE_TEXT = os.getenv("OPENAI_MODEL_GENERATE_TEXT", DEFAULT_CHAT_MODEL
 MODEL_CRITIQUE = os.getenv("OPENAI_MODEL_CRITIQUE", DEFAULT_CHAT_MODEL)
 MODEL_INTERVIEW = os.getenv("OPENAI_MODEL_INTERVIEW", DEFAULT_CHAT_MODEL)
 MODEL_SAPPHO = os.getenv("OPENAI_MODEL_SAPPHO", DEFAULT_CHAT_MODEL)
+
+
+def _style_signals(text: str) -> dict[str, float | int | str]:
+    """Extract lightweight style metrics so critique output reacts to input variation."""
+    cleaned = text.strip()
+    words = re.findall(r"\b\w+\b", cleaned)
+    word_count = len(words)
+
+    sentences = [s for s in re.split(r"[.!?]+", cleaned) if s.strip()]
+    sentence_count = len(sentences) or 1
+    avg_sentence_len = round(word_count / sentence_count, 2)
+
+    lower = cleaned.lower()
+    first_person_markers = [" i ", " my ", " me ", " mine ", " we ", " our ", " us "]
+    corporate_markers = [
+        "kpi", "metrics", "stakeholder", "deliverable", "synergy", "fast-paced",
+        "results-driven", "value-add", "scalable", "cross-functional", "deadline",
+    ]
+
+    fp_hits = sum(lower.count(marker.strip()) for marker in first_person_markers)
+    corp_hits = sum(lower.count(marker) for marker in corporate_markers)
+
+    if fp_hits > corp_hits:
+        tone_guess = "more personal"
+    elif corp_hits > fp_hits:
+        tone_guess = "more corporate/formal"
+    else:
+        tone_guess = "mixed/neutral"
+
+    return {
+        "word_count": word_count,
+        "sentence_count": sentence_count,
+        "avg_sentence_length": avg_sentence_len,
+        "first_person_marker_hits": fp_hits,
+        "corporate_jargon_hits": corp_hits,
+        "tone_guess": tone_guess,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -35,12 +74,22 @@ def critique_text(text: str, context: str | None = None) -> str:
     Critical reflection on a cover letter:
     Which aspects of human identity were erased to appear 'hireable'?
     """
+    signals = _style_signals(text)
+
     prompt = (
         "You are a critical humanities scholar. Read the corporate text below and produce a "
-        "concise critical reflection (3-6 bullets): list which aspects of human identity, "
+        "concise critical reflection (4-6 bullets): list which aspects of human identity, "
         "experience, or difference the text erases or suppresses to make the applicant more "
         "'hireable' according to the job description. Also suggest one alternative sentence "
         "that preserves an aspect of identity while remaining professional.\n\n"
+        "Use the input text itself as evidence. Each bullet must quote at least one short exact phrase "
+        "from the provided corporate text in double quotes.\n"
+        "Focus on differences in style/tone/register, not only generic hiring critique.\n"
+        "Output format constraints:\n"
+        "- Return plain markdown bullet points and one short alternative sentence.\n"
+        "- Do NOT return JSON.\n"
+        "- Do NOT return scoring fields such as score_total/score_formal/score_must/score_nice.\n\n"
+        f"Detected style signals: {signals}\n\n"
     )
     if context:
         prompt += f"Context (job description):\n{context}\n\n"
@@ -52,7 +101,40 @@ def critique_text(text: str, context: str | None = None) -> str:
         temperature=0.2,
         max_tokens=400,
     )
-    return response.choices[0].message.content.strip()
+    answer = response.choices[0].message.content.strip()
+
+    # Guardrail: if model drifts into Fit Check JSON, retry once with stricter correction.
+    try:
+        maybe_json = answer
+        if maybe_json.startswith("```") and maybe_json.endswith("```"):
+            maybe_json = maybe_json.strip("`").replace("json", "", 1).strip()
+        obj = json.loads(maybe_json)
+        if isinstance(obj, dict) and any(
+            key in obj for key in ("score_total", "score_formal", "score_must", "score_nice")
+        ):
+            correction_prompt = (
+                "Your previous answer used the wrong format. "
+                "Return a rhetorical critique only, not a fit analysis.\n\n"
+                "Required output: 4-6 markdown bullets about erasure/suppression in the text, "
+                "plus one alternative sentence preserving identity while staying professional.\n"
+                "Each bullet must include at least one exact quoted phrase from the given text.\n"
+                "Forbidden output: JSON, numeric scores, fit labels.\n\n"
+            )
+            if context:
+                correction_prompt += f"Context (job description):\n{context}\n\n"
+            correction_prompt += f"Corporate text:\n{text}"
+
+            retry = client.chat.completions.create(
+                model=MODEL_CRITIQUE,
+                messages=[{"role": "user", "content": correction_prompt}],
+                temperature=0.2,
+                max_tokens=400,
+            )
+            return retry.choices[0].message.content.strip()
+    except Exception:
+        pass
+
+    return answer
 
 
 def chat_interview(

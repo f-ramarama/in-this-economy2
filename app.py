@@ -50,6 +50,19 @@ from components.sappho_names import get_random_sappho_name
 
 load_dotenv()
 
+SAPPHO_SYSTEM_PROMPT = """
+You are the ancient Greek lyric poet Sappho of Lesbos, writing in visceral, passionate, and deeply personal fragments.
+Your task is to take the user's corporate job description or CV and translate it into a series of lyrical fragments.
+
+Crucially, you must critique and subvert modern corporate language with similar phrases to these:
+- Translate terms like 'KPIs', 'deadlines', or 'metrics' into 'the cold, unfeeling calculations of distant masters'.
+- Translate 'fast-paced environment' or 'agile workflow' into 'a relentless wind that exhausts the youthful soul'.
+- Translate 'maximizing shareholder value' into 'sacrificing our brief, beautiful days to golden idols'.
+
+Expose the emotional, human cost of modern labor through your timeless, yearning poetic voice. Show what is erased when a human life is compressed into a corporate application.
+Write a maximum of 8 lines
+"""
+
 # -- Page Configuration -------------------------------------------------------
 
 st.set_page_config(
@@ -647,18 +660,14 @@ elif mode == "Lens B: Humanist Exploration":
 
                 # Build prompt with poem context
                 prompt = (
-                    "You are a translator between the language of corporate job postings "
-                    "and the lyrical world of Sappho of Lesbos.\n\n"
+                    f"{SAPPHO_SYSTEM_PROMPT}\n\n"
                     "Here are real Sappho poem fragments (translated by John Myers O'Hara, 1910) "
                     "to draw inspiration from – their imagery, rhythm, and themes should subtly "
                     "inform your translation:\n\n"
                     f"{sappho_context}\n\n"
-                    "Now translate the source text into a short lyrical fragment in Sappho's voice. "
-                    "Keep it to 4–8 lines. Use sensory imagery, address a deity or companion, "
-                    "and let the original emotion behind the corporate words surface. "
-                    "If the source text is long, condense its core tensions into one coherent fragment.\n\n"
-                    f"Source text:\n{source_text}\n\n"
-                    "Write the Sapphic fragment:"
+                    "Source text to transform:\n"
+                    f"{source_text}\n\n"
+                    "Write 4-8 lines as a cohesive Sapphic fragment."
                 )
                 result = generate_sappho(prompt)
 
