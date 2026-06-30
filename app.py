@@ -9,7 +9,7 @@ Two lenses on application language:
     · Mock Interview Chatbot (full Context Window)
 
   Lens B – Humanist Exploration
-    · Sappho Translator (RAG over poem database)
+        · Sappho's Mirror (RAG over poem database)
     · Rhetoric Dashboard / Erasure Critique
 
 Project structure:
@@ -67,7 +67,7 @@ Write a maximum of 8 lines
 
 st.set_page_config(
     page_title="in this economy?",
-    page_icon="✦",
+    page_icon="🏺",
     layout="wide",
 )
 
@@ -100,6 +100,12 @@ if "interview_job_desc" not in st.session_state:
 if "interview_manager_name" not in st.session_state:
     st.session_state.interview_manager_name = ""
 
+if "glossary_candidates" not in st.session_state:
+    st.session_state.glossary_candidates = []
+
+if "glossary_retrieval_context" not in st.session_state:
+    st.session_state.glossary_retrieval_context = ""
+
 # ── Load Sappho poem database once ──────────────────────────────────────────
 
 if st.session_state.sappho_collection is None:
@@ -114,6 +120,33 @@ if st.session_state.sappho_collection is None:
 with st.sidebar:
     st.title("✦ in this economy?")
     st.caption("An AI tool with two lenses on application language.")
+
+    with st.expander("✦ About this project", expanded=False):
+        st.markdown(
+            """
+            **in this economy?** sits at the intersection of vocational utility and humanistic inquiry.
+
+            The job application process is not neutral. Cover letters, fit checks, and interview
+            scripts are linguistic performances - they ask candidates to translate themselves into
+            a format legible to capital. This tool makes that translation visible by offering two
+            simultaneous lenses on the same documents:
+
+            **Lens A** performs the translation faithfully: it checks fit, generates letters,
+            simulates interviews. It does what the market asks.
+
+            **Lens B** interrogates the translation: it renders corporate language into Sapphic
+            lyric, expands terms through a Corporate Glossary, and submits cover letters to
+            rhetorical critique - asking what gets lost when a person becomes an applicant.
+
+            Sappho's Mirror draws on a database of public domain translations
+            (John Myers O'Hara, 1910) to surface the emotional register beneath corporate language.
+            The Corporate Glossary maps each term across three layers (official meaning, implicit
+            demand, Sapphic translation). The Rhetoric Dashboard asks which aspects of human identity
+            a cover letter suppresses in order to be hireable.
+
+            The project does not resolve the tension between the two lenses. That tension is the point.
+            """
+        )
     st.markdown("---")
 
     mode = st.radio(
@@ -165,7 +198,10 @@ with st.sidebar:
 
 if mode == "Lens A: Vocational Tool":
     st.header("Lens A: The Vocational Tool")
-    st.write("Practical tools for job search – based on your uploaded documents.")
+    st.write(
+        "Practical application tools for job search: fit analysis, cover letter generation, "
+        "and interview simulation based on your uploaded materials."
+    )
 
     # ── 1. Fit Check ────────────────────────────────────────────────────────
     st.markdown("---")
@@ -442,7 +478,7 @@ if mode == "Lens A: Vocational Tool":
                 "experiences, or skills that are not mentioned in the text.\n\n"
 
                 "STRUCTURE\n"
-                "1. Appropirate Greeting"
+                "1. Appropriate Greeting"
                 "2. Opening paragraph: Express genuine interest in the specific role and organization. "
                 "Do not open with 'I am writing to apply for'. Be direct and specific.\n"
                 "3. Main paragraph(s): Connect the candidate's concrete experience and skills to the "
@@ -479,8 +515,8 @@ if mode == "Lens A: Vocational Tool":
     st.markdown("---")
     st.subheader("③ Mock Interview Chatbot")
     st.write(
-        "The chatbot takes on the role of a Hiring Manager. "
-        "It remembers the entire conversation history of the session."
+        "The chatbot takes on the role of a Hiring Manager, keeps full conversation memory, "
+        "and uses your selected context (job posting and optional CV evidence)."
     )
 
     with st.expander("⚙ Set interview context (optional)"):
@@ -577,15 +613,17 @@ if mode == "Lens A: Vocational Tool":
 
 elif mode == "Lens B: Humanist Exploration":
     st.header("Lens B: Humanist Exploration")
-    st.write("The same language – viewed through a different lens.")
-
-    # ── 1. Sappho Translator ─────────────────────────────────────────────────
-    st.markdown("---")
-    st.subheader("① Sappho Translator")
     st.write(
-        "Enter a corporate phrase. The AI translates it into a lyrical fragment "
-        "in Sappho's style – based on a database of public domain translations "
-        "(John Myers O'Hara, 1910)."
+        "The same application language, read critically: poetic transformation, term deconstruction, "
+        "and rhetorical critique."
+    )
+
+    # ── 1. Sappho's Mirror ───────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("① Sappho's Mirror")
+    st.write(
+        "Transform corporate language into a Sapphic fragment, either from a manual phrase "
+        "or from one selected uploaded document via RAG."
     )
 
     if st.session_state.sappho_collection is None:
@@ -675,6 +713,25 @@ elif mode == "Lens B: Humanist Exploration":
             st.subheader("✦ Sappho Answers")
             st.write(result)
 
+            with st.expander("✦ What does this translation reveal?"):
+                if translation_source == "Manual phrase":
+                    source_for_reflection = corporate_phrase.strip()
+                else:
+                    source_for_reflection = source_text
+
+                reflection_prompt = (
+                    "The following corporate language was submitted to Sappho's Mirror:\n"
+                    f"\"{source_for_reflection}\"\n\n"
+                    "The translation produced was:\n"
+                    f"{result}\n\n"
+                    "In 3-4 sentences, reflect critically: what emotional or human need does the "
+                    "corporate language suppress? What does the Sapphic register restore or make visible? "
+                    "What does this reveal about how labor markets construct self-presentation?"
+                )
+                with st.spinner("Generating reflection…"):
+                    reflection = generate_text(reflection_prompt)
+                st.write(reflection)
+
             if translation_source == "Uploaded documents (RAG)":
                 with st.expander("RAG excerpts used for translation"):
                     st.text(source_text)
@@ -686,12 +743,139 @@ elif mode == "Lens B: Humanist Exploration":
                     st.caption(f"Themes: {hit['themes']}")
                     st.caption(f"Curatorial note: {hit['notes']}")
 
-    # ── 2. Rhetoric Dashboard / Erasure Critique ──────────────────────────────
+    # ── 2. Corporate Glossary ─────────────────────────────────────────────────
     st.markdown("---")
-    st.subheader("② Rhetoric Dashboard – What Was Erased?")
+    st.subheader("② Corporate Glossary")
     st.write(
-        "Analyzes a cover letter: which aspects of human identity were "
-        "suppressed to appear 'hireable'?"
+        "Analyze a corporate term in three layers: official HR meaning, implicit human demand, "
+        "and a Sapphic translation."
+    )
+
+    glossary_source = st.radio(
+        "Glossary source",
+        ["Manual term", "Extract from uploaded documents (RAG)"],
+        horizontal=True,
+        key="glossary_source_mode",
+    )
+
+    selected_glossary_term = ""
+    glossary_doc_scope = "All indexed documents"
+
+    if glossary_source == "Manual term":
+        selected_glossary_term = st.text_input(
+            "Corporate term",
+            placeholder="e.g., ownership, culture fit, hands-on mentality",
+            key="glossary_manual_term",
+        ).strip()
+    else:
+        if st.session_state.rag_collection is None:
+            st.info("Upload documents and build the RAG index to extract corporate phrases.")
+        else:
+            doc_options = ["All indexed documents"] + st.session_state.uploaded_document_sources
+            glossary_doc_scope = st.selectbox(
+                "Extract from",
+                options=doc_options,
+                key="glossary_doc_scope",
+            )
+
+            if st.button("Extract corporate phrases", key="extract_glossary_phrases"):
+                extraction_hits = query_relevant_docs(
+                    "corporate terms requirements values culture fit ownership agility growth mindset "
+                    "fast-paced team player proactive self-starter",
+                    st.session_state.rag_collection,
+                    top_k=8,
+                    source_filter=None if glossary_doc_scope == "All indexed documents" else glossary_doc_scope,
+                )
+                extraction_context = format_retrieval_results(extraction_hits)
+                st.session_state.glossary_retrieval_context = extraction_context
+
+                extraction_prompt = (
+                    "Extract exactly 8 short corporate phrases or terms from the text below. "
+                    "Return one phrase per line. No numbering, no bullets, no explanations.\n\n"
+                    f"Text:\n{extraction_context}"
+                )
+                extraction_answer = generate_text(extraction_prompt)
+
+                lines = [line.strip() for line in extraction_answer.splitlines() if line.strip()]
+                cleaned = []
+                for line in lines:
+                    normalized = line.lstrip("-•*0123456789. )(").strip()
+                    if normalized and normalized not in cleaned:
+                        cleaned.append(normalized)
+
+                st.session_state.glossary_candidates = cleaned[:12]
+
+            if st.session_state.glossary_candidates:
+                selected_glossary_term = st.selectbox(
+                    "Choose extracted phrase",
+                    options=st.session_state.glossary_candidates,
+                    key="glossary_selected_candidate",
+                )
+
+    if st.button("Analyze term", key="run_glossary"):
+        if not selected_glossary_term:
+            st.warning("Please enter a term or extract/select one from your documents.")
+            st.stop()
+
+        retrieval_context_note = ""
+        if glossary_source == "Extract from uploaded documents (RAG)" and st.session_state.glossary_retrieval_context:
+            retrieval_context_note = (
+                "Document context where the term appears:\n"
+                f"{st.session_state.glossary_retrieval_context}\n\n"
+            )
+
+        official_prompt = (
+            "Explain the following corporate term in a neutral HR tone in 2-3 sentences. "
+            "Do not critique yet.\n\n"
+            f"Term: {selected_glossary_term}\n\n"
+            f"{retrieval_context_note}"
+        )
+
+        implicit_prompt = (
+            "Provide a humanistic critique of the same term in 3 concise bullet points. "
+            "Focus on implicit behavioral demands, emotional labor, and self-presentation pressure.\n\n"
+            f"Term: {selected_glossary_term}\n\n"
+            f"{retrieval_context_note}"
+        )
+
+        with st.spinner("Analyzing glossary term…"):
+            official_meaning = generate_text(official_prompt)
+            implicit_demand = generate_text(implicit_prompt)
+
+            glossary_sappho_hits = query_sappho(
+                query=selected_glossary_term,
+                collection=st.session_state.sappho_collection,
+                top_k=3,
+            )
+            glossary_sappho_context = format_sappho_context(glossary_sappho_hits)
+            glossary_sappho_prompt = (
+                f"{SAPPHO_SYSTEM_PROMPT}\n\n"
+                "Use the following Sappho fragments as inspiration:\n\n"
+                f"{glossary_sappho_context}\n\n"
+                f"Corporate term: {selected_glossary_term}\n"
+                "Write a 4-8 line Sapphic translation."
+            )
+            glossary_sappho = generate_sappho(glossary_sappho_prompt)
+
+        st.markdown("### Official Meaning")
+        st.write(official_meaning)
+
+        st.markdown("### Implicit Demand")
+        st.write(implicit_demand)
+
+        st.markdown("### Sappho Translation")
+        st.write(glossary_sappho)
+
+        if glossary_source == "Extract from uploaded documents (RAG)" and st.session_state.glossary_retrieval_context:
+            with st.expander("RAG context used"):
+                st.text(st.session_state.glossary_retrieval_context)
+
+    # ── 3. Rhetoric Dashboard / Erasure Critique ──────────────────────────────
+    st.markdown("---")
+    st.subheader("③ Rhetoric Dashboard – What Was Erased?")
+    st.write(
+        "Critically analyzes a cover letter and asks which parts of identity are suppressed "
+        "to appear hireable for the role."
     )
 
     cover_to_analyze = st.text_area(

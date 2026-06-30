@@ -13,8 +13,10 @@ Streamlit app with two lenses on application language:
 ├── components/
 │   ├── llm.py
 │   ├── rag.py
+│   ├── sappho_names.py
 │   └── sappho_rag.py
 ├── data/
+│   ├── sappho_names.json
 │   └── sappho_poems.json
 ├── requirements.txt
 └── README.md
@@ -37,12 +39,26 @@ Streamlit app with two lenses on application language:
 
 ### Lens B: Humanist Exploration
 
-1. Sappho Translator
-- Translates corporate phrasing into short lyrical fragments inspired by Sappho.
-- Uses semantic retrieval over `data/sappho_poems.json`.
+1. Sappho's Mirror
+- Transforms corporate language into short Sapphic fragments.
+- Accepts either a manual phrase or one selected uploaded document (RAG mode).
+- Uses semantic retrieval over `data/sappho_poems.json` for poetic context.
+- Includes a post-translation reflection panel: "What does this translation reveal?"
 
-2. Rhetoric Dashboard
+2. Corporate Glossary
+- Interactive lexicon for corporate terms with three outputs:
+	- Official meaning (neutral HR reading)
+	- Implicit demand (humanistic critique)
+	- Sappho translation (poetic reframing)
+- Works with manual terms or extracted phrases from uploaded RAG documents.
+
+3. Rhetoric Dashboard
 - Critiques cover letters for identity erasure and rhetorical adaptation to hiring norms.
+
+## Sidebar / Framing
+
+- Includes an "About this project" expander in the sidebar.
+- Makes the critical lens explicit for demos and evaluation contexts.
 
 ## Setup
 
@@ -90,10 +106,11 @@ streamlit run app.py
 	- `OPENAI_MODEL_GENERATE_TEXT=...` (Fit Check, Cover Letter)
 	- `OPENAI_MODEL_CRITIQUE=...` (Rhetoric Dashboard)
 	- `OPENAI_MODEL_INTERVIEW=...` (Mock Interview)
-	- `OPENAI_MODEL_SAPPHO=...` (Sappho Translator)
+	- `OPENAI_MODEL_SAPPHO=...` (Sappho's Mirror + Corporate Glossary poetic translation)
 - Embedding model in use: `text-embedding-3-small`
 - ChromaDB is configured as persistent local storage under `.chroma/`
 - Supported upload formats: PDF, TXT, DOCX
+- Sappho's Mirror RAG mode currently translates one selected uploaded document at a time.
 
 ## Data Source (Sappho)
 
@@ -102,3 +119,5 @@ Poems are based on:
 by John Myers O'Hara (1910), Project Gutenberg eBook #42166.
 
 License: Public Domain
+
+Additional name list for interview persona randomization is stored in `data/sappho_names.json`.
