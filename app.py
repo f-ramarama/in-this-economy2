@@ -832,8 +832,9 @@ elif mode == "Lens B: Humanist Exploration":
         )
 
         implicit_prompt = (
-            "Provide a humanistic critique of the same term in 3 concise bullet points. "
-            "Focus on implicit behavioral demands, emotional labor, and self-presentation pressure.\n\n"
+            "Provide a humanistic critique of the same term in 4-7 concise bullet points. "
+            "Identify the most relevant critique dimensions for this term and do not force fixed categories. "
+            "At least 2 bullet points must be term-specific and include the exact term in double quotes.\n\n"
             f"Term: {selected_glossary_term}\n\n"
             f"{retrieval_context_note}"
         )
@@ -878,22 +879,71 @@ elif mode == "Lens B: Humanist Exploration":
         "to appear hireable for the role."
     )
 
-    cover_to_analyze = st.text_area(
-        "Insert cover letter",
-        height=200,
-        placeholder="Paste generated or your own cover letter here…",
-        key="critique_input",
+    critique_cover_source = st.radio(
+        "Cover letter source",
+        ["Paste text", "Upload file"],
+        horizontal=True,
+        key="critique_cover_source",
     )
 
-    # Job description as optional context
-    critique_context = st.text_area(
-        "Job posting as context (optional)",
-        height=80,
-        placeholder="Helps the AI sharpen the analysis…",
-        key="critique_context",
+    cover_to_analyze = ""
+    uploaded_cover_file = None
+
+    if critique_cover_source == "Paste text":
+        cover_to_analyze = st.text_area(
+            "Insert cover letter",
+            height=200,
+            placeholder="Paste generated or your own cover letter here…",
+            key="critique_input",
+        )
+    else:
+        uploaded_cover_file = st.file_uploader(
+            "Upload cover letter",
+            type=["pdf", "txt", "docx"],
+            key="critique_cover_upload",
+        )
+        st.caption("Supported formats: PDF, TXT, DOCX")
+
+    critique_context_mode = st.radio(
+        "Context source",
+        ["Manual text", "Uploaded documents (RAG)"],
+        horizontal=True,
+        key="critique_context_mode",
     )
+
+    critique_context = ""
+    critique_doc_scope = "All indexed documents"
+    critique_rag_top_k = 7
+
+    if critique_context_mode == "Manual text":
+        # Job description as optional context
+        critique_context = st.text_area(
+            "Job posting as context (optional)",
+            height=80,
+            placeholder="Helps the AI sharpen the analysis…",
+            key="critique_context",
+        )
+    else:
+        if st.session_state.rag_collection is None:
+            st.info("Upload documents and build the RAG index to use document context.")
+        else:
+            critique_doc_options = ["All indexed documents"] + st.session_state.uploaded_document_sources
+            critique_doc_scope = st.selectbox(
+                "Choose RAG document",
+                options=critique_doc_options,
+                key="critique_doc_scope",
+            )
+            st.caption("RAG excerpts are fixed to 7.")
 
     if st.button("Start analysis", key="run_critique"):
+        if critique_cover_source == "Upload file" and uploaded_cover_file is not None:
+            parsed_docs = load_documents([uploaded_cover_file])
+            if parsed_docs and parsed_docs[0].get("text", "").strip():
+                cover_to_analyze = parsed_docs[0]["text"].strip()
+            else:
+                st.warning("Could not extract text from the uploaded cover letter.")
+                st.stop()
+
         if not cover_to_analyze.strip():
             # Fallback: use last generated cover letter
             if st.session_state.get("last_cover_letter"):
@@ -903,11 +953,38 @@ elif mode == "Lens B: Humanist Exploration":
                 st.warning("Please insert a cover letter.")
                 st.stop()
 
+        critique_context_value = None
+        if critique_context_mode == "Manual text":
+            if critique_context.strip():
+                critique_context_value = critique_context
+        else:
+            if st.session_state.rag_collection is None:
+                st.warning("Please upload documents and build the RAG index first.")
+                st.stop()
+
+            critique_hits = query_relevant_docs(
+                query=cover_to_analyze[:1500] or "job posting requirements role expectations",
+                collection=st.session_state.rag_collection,
+                top_k=critique_rag_top_k,
+                source_filter=None if critique_doc_scope == "All indexed documents" else critique_doc_scope,
+            )
+            critique_context_from_rag = format_retrieval_results(critique_hits).strip()
+
+            if not critique_context_from_rag:
+                st.warning("No relevant RAG context found for the selected document.")
+                st.stop()
+
+            critique_context_value = critique_context_from_rag
+
         with st.spinner("Rhetorical analysis running…"):
             critique = critique_text(
                 text=cover_to_analyze,
-                context=critique_context if critique_context.strip() else None,
+                context=critique_context_value,
             )
 
         st.subheader("✦ Rhetorical Analysis")
         st.write(critique)
+
+        if critique_context_mode == "Uploaded documents (RAG)" and critique_context_value:
+            with st.expander("RAG context used"):
+                st.text(critique_context_value)

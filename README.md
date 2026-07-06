@@ -51,9 +51,13 @@ Streamlit app with two lenses on application language:
 	- Implicit demand (humanistic critique)
 	- Sappho translation (poetic reframing)
 - Works with manual terms or extracted phrases from uploaded RAG documents.
+- Humanistic critique prompt is adaptive (4-7 bullets) and term-specific.
 
 3. Rhetoric Dashboard
 - Critiques cover letters for identity erasure and rhetorical adaptation to hiring norms.
+- Cover letter input can be pasted or uploaded (PDF/TXT/DOCX).
+- Context can be provided manually or retrieved from indexed documents (RAG).
+- In RAG mode, the number of retrieved excerpts is fixed to 7.
 
 ## Sidebar / Framing
 
@@ -111,6 +115,8 @@ streamlit run app.py
 - ChromaDB is configured as persistent local storage under `.chroma/`
 - Supported upload formats: PDF, TXT, DOCX
 - Sappho's Mirror RAG mode currently translates one selected uploaded document at a time.
+- Rhetoric Dashboard supports uploaded cover letters and optional RAG context selection.
+- Rhetoric Dashboard retrieves 7 RAG excerpts when document context mode is enabled.
 
 ## Data Source (Sappho)
 
